@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prepaid Fraud Intelligence Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/dist/umd/index.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --border-color: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent-blue: #58a6ff;
+            --accent-red: #f85149;
+            --accent-green: #3fb950;
+            --accent-yellow: #d29922;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+        }
+        .card {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+        }
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+        }
+        .ask-ai-input {
+            background-color: #010409;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .ask-ai-input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+        }
+        .data-table th, .data-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .data-table tbody tr:hover {
+            background-color: #222831;
+        }
+        .btn-primary {
+            background-color: var(--accent-blue);
+            color: #ffffff;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            transition: background-color 0.2s;
+        }
+        .btn-primary:hover {
+            background-color: #79b8ff;
+        }
+        .btn-secondary {
+            background-color: #21262d;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .btn-secondary:hover {
+            background-color: #30363d;
+            border-color: #8b949e;
+        }
+        /* Agentic Workflow Styles */
+        .agent-log { max-height: 350px; overflow-y: auto; }
+        .agent-log-item { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.5rem; border-radius: 0.375rem; }
+        .agent-log-item.thought { background-color: rgba(210, 153, 34, 0.1); }
+        .agent-log-item.action { background-color: rgba(88, 166, 255, 0.1); }
+        .agent-log-item.response { background-color: rgba(63, 185, 80, 0.1); }
+        .agent-log-item.result { background-color: var(--bg-primary); border: 1px solid var(--accent-green); }
+        .agent-log-item .icon { flex-shrink: 0; }
+    </style>
+</head>
+<body class="p-4 sm:p-6">
+    <div class="max-w-screen-2xl mx-auto space-y-6">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center space-y-3 md:space-y-0">
+            <div class="flex items-center space-x-4">
+                 <svg class="w-10 h-10 text-blue-500" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2L3 5V11C3 16.52 7.03 21.74 12 23C16.97 21.74 21 16.52 21 11V5L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M7 13.04C7.62 13.5 8.5 14 10 14C11.5 14 12.38 13.5 13 13.04M10 11.04C10.62 11.5 11.5 12 13 12C14.5 12 15.38 11.5 16 11.04" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <div>
+                    <h1 class="text-2xl font-bold text-white">Prepaid Fraud Intelligence</h1>
+                    <p class="text-sm text-gray-400" id="current-time"></p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button id="manage-dashboards-btn" class="btn-secondary flex items-center space-x-2"><i data-lucide="layout-dashboard"></i><span>Manage Dashboards</span></button>
+                <button id="create-report-btn" class="btn-primary flex items-center space-x-2"><i data-lucide="plus-circle"></i><span>Create Report</span></button>
+                 <div class="flex items-center space-x-3 border-l border-gray-700 pl-4">
+                    <img class="w-10 h-10 rounded-full" src="https://placehold.co/100x100/22c55e/ffffff?text=S" alt="User avatar">
+                    <div>
+                        <p class="font-semibold text-sm text-white">Suresh</p>
+                        <p class="text-xs text-gray-400">Fraud Analyst</p>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Left Column -->
+            <div class="lg:col-span-2 xl:col-span-3 space-y-6">
+                <!-- Top Row -->
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                    <div class="card md:col-span-2">
+                        <h3 class="font-semibold mb-2 flex items-center"><i data-lucide="sparkles" class="w-5 h-5 mr-2 text-blue-400"></i>AI Insights</h3>
+                        <p class="text-sm text-gray-400">High-risk SIM swap pattern detected across multiple accounts originating from a single device cluster. Recommend immediate review.</p>
+                    </div>
+                    <div class="card">
+                        <h3 class="font-semibold mb-2 flex items-center"><i data-lucide="eye" class="w-5 h-5 mr-2 text-yellow-400"></i>AI Focus Area</h3>
+                        <p class="text-sm text-gray-400">Focus on **IRSF on new activations**. AI models predict a 45% increase in this vector over the next 72 hours.</p>
+                        <a href="#" id="view-cluster-btn" class="text-xs text-blue-400 hover:underline mt-2 inline-flex items-center">View Alert Cluster <i data-lucide="arrow-right" class="w-3 h-3 ml-1"></i></a>
+                    </div>
+                    <div class="card">
+                        <h3 class="font-semibold mb-2 flex items-center"><i data-lucide="shield-check" class="w-5 h-5 mr-2 text-green-400"></i>System Status</h3>
+                        <p class="text-sm text-gray-400">All fraud detection models are operational. Last model update: 5 mins ago.</p>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="card h-80 flex flex-col">
+                        <h3 class="font-semibold mb-4">Fraudulent Activity Trends (Last 7 Days)</h3>
+                        <div class="flex-grow">
+                            <canvas id="trendsChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card h-80 flex flex-col">
+                        <h3 class="font-semibold mb-4">Alerts by Risk Level</h3>
+                        <div class="flex-grow">
+                            <canvas id="riskLevelChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Suspicious Activity Table -->
+                <div class="card">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+                        <h2 class="text-lg font-bold">Recent Suspicious Activity</h2>
+                        <div class="w-full md:w-auto flex items-center space-x-2">
+                            <div class="relative flex-grow">
+                                <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500"></i>
+                                <input type="text" id="ask-ai-search" placeholder="Ask AI: 'Show high-risk top-ups from last night...'" class="ask-ai-input w-full pl-10 pr-4 py-2 rounded-md text-sm">
+                            </div>
+                            <select id="filter-type" class="ask-ai-input py-2 px-3 rounded-md text-sm">
+                                <option value="all">All Types</option>
+                                <option value="SIM Swap">SIM Swap</option>
+                                <option value="IRSF">IRSF</option>
+                                <option value="Top-up Fraud">Top-up Fraud</option>
+                                <option value="Account Takeover">Account Takeover</option>
+                                <option value="MDN Change Risk">MDN Change Risk</option>
+                                <option value="Unusual Location Login">Unusual Location Login</option>
+                                <option value="High Velocity transactions">High Velocity transactions</option>
+                                <option value="Account Takeover Attempt">Account Takeover Attempt</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm data-table">
+                            <thead>
+                                <tr class="border-b border-gray-700">
+                                    <th>Timestamp</th>
+                                    <th>Subscriber ID</th>
+                                    <th>Activity Type</th>
+                                    <th>Location</th>
+                                    <th>Risk Score</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="activity-table-body">
+                                <!-- Data will be populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="lg:col-span-1 xl:col-span-1 space-y-6">
+                <div class="card">
+                    <h3 class="font-semibold mb-4 flex items-center"><i data-lucide="credit-card" class="w-5 h-5 mr-2 text-purple-400"></i>AI BIN Analysis</h3>
+                    <div class="space-y-3">
+                        <p class="text-sm text-gray-400">Analysis of BIN: <span class="font-mono text-white">4596 87** **** ****</span></p>
+                        <ul class="text-xs space-y-2">
+                            <li class="flex justify-between"><span>Issuing Bank:</span> <span class="text-white">Metropolis Bank</span></li>
+                            <li class="flex justify-between"><span>Card Type:</span> <span class="text-white">Prepaid Debit</span></li>
+                            <li class="flex justify-between"><span>Country:</span> <span class="text-white">Estonia (EE)</span></li>
+                            <li class="flex justify-between"><span>AI Risk Assessment:</span> <span class="text-red-400 font-bold">High</span></li>
+                        </ul>
+                        <p class="text-xs text-gray-400 pt-2 border-t border-gray-700">AI Note: This BIN is associated with a recent surge in fraudulent top-ups across multiple platforms.</p>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3 class="font-semibold mb-4 flex items-center"><i data-lucide="bot" class="w-5 h-5 mr-2 text-teal-400"></i>Predictive Threat Simulation</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="threat-vector" class="text-xs text-gray-400">Select Threat Vector:</label>
+                            <select id="threat-vector" class="w-full mt-1 ask-ai-input py-2 px-3 rounded-md text-sm">
+                                <option value="Phishing Campaign">Phishing Campaign</option>
+                                <option value="Zero-Day Exploit">Zero-Day Exploit</option>
+                                <option value="Coordinated IRSF Attack">Coordinated IRSF Attack</option>
+                            </select>
+                        </div>
+                        <button id="run-simulation-btn" class="w-full btn-secondary flex items-center justify-center space-x-2">
+                            <i data-lucide="play-circle" class="w-4 h-4"></i>
+                            <span>Run Simulation</span>
+                        </button>
+                        <div id="simulation-result" class="text-center p-4 bg-gray-900 rounded-md">
+                            <p class="text-sm text-gray-400">Predicted Impact:</p>
+                            <p id="simulation-loss" class="text-lg font-bold text-red-400">~$15,200 Loss</p>
+                            <p id="simulation-duration" class="text-xs text-gray-500">over 24 hours</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="details-modal" class="fixed inset-0 z-50 modal-backdrop hidden items-center justify-center p-4">
+        <div class="card w-full max-w-2xl transform transition-all" id="details-modal-content"></div>
+    </div>
+    <div id="ai-assist-modal" class="fixed inset-0 z-50 modal-backdrop hidden items-center justify-center p-4">
+        <div class="card w-full max-w-3xl transform transition-all" id="ai-assist-modal-content"></div>
+    </div>
+    <div id="notification-modal" class="fixed inset-0 z-50 modal-backdrop hidden items-center justify-center p-4">
+        <div class="card w-full max-w-md transform transition-all" id="notification-modal-content"></div>
+    </div>
+     <div id="create-report-modal" class="fixed inset-0 z-50 modal-backdrop hidden items-center justify-center p-4">
+        <div class="card w-full max-w-lg transform transition-all" id="create-report-modal-content"></div>
+    </div>
+    <div id="manage-dashboards-modal" class="fixed inset-0 z-50 modal-backdrop hidden items-center justify-center p-4">
+        <div class="card w-full max-w-lg transform transition-all" id="manage-dashboards-modal-content"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            lucide.createIcons();
+            
+            // Time display
+            function updateTime() {
+                const timeEl = document.getElementById('current-time');
+                if (timeEl) {
+                    timeEl.textContent = new Date().toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'medium' });
+                }
+            }
+            setInterval(updateTime, 1000);
+            updateTime();
+
+            // Charts
+            const trendsCtx = document.getElementById('trendsChart').getContext('2d');
+            new Chart(trendsCtx, {
+                type: 'line',
+                data: {
+                    labels: ['6 days ago', '5 days ago', '4 days ago', '3 days ago', '2 days ago', 'Yesterday', 'Today'],
+                    datasets: [{
+                        label: 'Fraudulent Activities',
+                        data: [120, 150, 130, 180, 160, 210, 200],
+                        borderColor: 'var(--accent-blue)',
+                        backgroundColor: 'rgba(88, 166, 255, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, grid: { color: 'var(--border-color)' } }, x: { grid: { color: 'var(--border-color)' } } }, plugins: { legend: { display: false } } }
+            });
+
+            const riskLevelCtx = document.getElementById('riskLevelChart').getContext('2d');
+            new Chart(riskLevelCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Low', 'Medium', 'High', 'Critical'],
+                    datasets: [{
+                        label: 'Alerts',
+                        data: [85, 120, 65, 25],
+                        backgroundColor: [
+                            '#28a745', // Low
+                            '#17a2b8', // Medium
+                            '#ffc107', // High
+                            '#dc3545'  // Critical
+                        ],
+                        borderRadius: 4,
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', scales: { x: { grid: { color: 'var(--border-color)' } }, y: { grid: { display: false } } }, plugins: { legend: { display: false } } }
+            });
+
+            // Suspicious Activity Table
+            const activityData = [
+                { ts: new Date().setHours(new Date().getHours() - 1), id: 'SUB-84392', type: 'SIM Swap', loc: 'New York, NY', risk: 92, status: 'Pending Review' },
+                { ts: new Date().setHours(new Date().getHours() - 2), id: 'SUB-22456', type: 'SIM Swap', loc: 'Los Angeles, CA', risk: 88, status: 'Pending Review' },
+                { ts: new Date().setHours(new Date().getHours() - 3), id: 'SUB-10293', type: 'IRSF', loc: 'Miami, FL', risk: 85, status: 'Blocked' },
+                { ts: new Date().setHours(new Date().getHours() - 4), id: 'SUB-66781', type: 'IRSF', loc: 'Chicago, IL', risk: 98, status: 'Blocked' },
+                { ts: new Date().setHours(new Date().getHours() - 5), id: 'SUB-58321', type: 'Top-up Fraud', loc: 'Houston, TX', risk: 78, status: 'Pending Review' },
+                { ts: new Date().setHours(new Date().getHours() - 6), id: 'SUB-11223', type: 'MDN Change Risk', loc: 'Denver, CO', risk: 82, status: 'Pending Review' },
+                { ts: new Date().setHours(new Date().getHours() - 7), id: 'SUB-93481', type: 'Account Takeover', loc: 'Phoenix, AZ', risk: 95, status: 'Resolved' },
+                { ts: new Date().setHours(new Date().getHours() - 8), id: 'SUB-44556', type: 'Unusual Location Login', loc: 'Seattle, WA', risk: 68, status: 'Resolved' },
+                { ts: new Date().setHours(new Date().getHours() - 9), id: 'SUB-19238', type: 'Top-up Fraud', loc: 'Philadelphia, PA', risk: 72, status: 'Blocked' },
+                { ts: new Date().setHours(new Date().getHours() - 10), id: 'SUB-77889', type: 'High Velocity transactions', loc: 'Boston, MA', risk: 91, status: 'Blocked' },
+                { ts: new Date().setHours(new Date().getHours() - 11), id: 'SUB-44890', type: 'Account Takeover', loc: 'San Antonio, TX', risk: 58, status: 'Pending Review' },
+                { ts: new Date().setHours(new Date().getHours() - 12), id: 'SUB-99001', type: 'Account Takeover Attempt', loc: 'Atlanta, GA', risk: 75, status: 'Pending Review' },
+                { ts: new Date().setHours(new Date().getHours() - 14), id: 'SUB-33567', type: 'Top-up Fraud', loc: 'San Diego, CA', risk: 65, status: 'Resolved' },
+                { ts: new Date().setHours(new Date().getHours() - 18), id: 'SUB-77001', type: 'Top-up Fraud', loc: 'Dallas, TX', risk: 32, status: 'Resolved' },
+                { ts: new Date().setHours(new Date().getHours() - 22), id: 'SUB-55123', type: 'IRSF', loc: 'San Jose, CA', risk: 45, status: 'Resolved' },
+            ];
+            
+            let currentFilteredData = [...activityData];
+
+            const tableBody = document.getElementById('activity-table-body');
+            const askAiSearch = document.getElementById('ask-ai-search');
+            const filterType = document.getElementById('filter-type');
+
+            function renderTable(data) {
+                tableBody.innerHTML = '';
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+                    const riskColor = item.risk > 90 ? 'text-red-500' : item.risk > 75 ? 'text-yellow-500' : 'text-green-500';
+                    const statusBadge = item.status === 'Pending Review' ? 'bg-yellow-500/20 text-yellow-400' : item.status === 'Blocked' ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400';
+
+                    let formattedDate;
+                    if (typeof dateFns !== 'undefined' && dateFns.formatDistanceToNow) {
+                        formattedDate = dateFns.formatDistanceToNow(item.ts, { addSuffix: true });
+                    } else {
+                        formattedDate = new Date(item.ts).toLocaleString();
+                    }
+
+                    row.innerHTML = `
+                        <td>${formattedDate}</td>
+                        <td>${item.id}</td>
+                        <td>${item.type}</td>
+                        <td>${item.loc}</td>
+                        <td><span class="${riskColor} font-bold">${item.risk}</span></td>
+                        <td><span class="px-2 py-1 text-xs font-medium rounded-full ${statusBadge}">${item.status}</span></td>
+                        <td class="flex items-center space-x-2">
+                            <button class="p-1 hover:bg-gray-700 rounded-md" onclick="viewDetails('${item.id}')" title="View Details"><i data-lucide="clipboard-list" class="w-4 h-4 text-gray-400"></i></button>
+                            <button class="p-1 hover:bg-gray-700 rounded-md" onclick="aiAssist('${item.id}')" title="AI Assist"><i data-lucide="bot" class="w-4 h-4 text-blue-400"></i></button>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+                lucide.createIcons();
+            }
+
+            function filterData() {
+                const query = askAiSearch.value.toLowerCase().trim();
+                const type = filterType.value;
+
+                let riskFilter = null;
+                if (query.includes("critical")) riskFilter = (risk) => risk > 95;
+                else if (query.includes("high risk") || query.includes("high-risk")) riskFilter = (risk) => risk >= 80 && risk <= 95;
+                else if (query.includes("medium risk") || query.includes("medium-risk")) riskFilter = (risk) => risk >= 50 && risk < 80;
+                else if (query.includes("low risk") || query.includes("low-risk")) riskFilter = (risk) => risk < 50;
+                
+                const searchKeywords = query
+                    .replace(/critical|high-risk|high risk|medium-risk|medium risk|low-risk|low risk/g, '')
+                    .trim()
+                    .split(' ')
+                    .filter(term => term.length > 0);
+
+                currentFilteredData = activityData.filter(item => {
+                    const typeMatch = type === 'all' || item.type === type;
+                    const riskMatch = riskFilter ? riskFilter(item.risk) : true;
+                    
+                    const keywordMatch = searchKeywords.length === 0 ? true : searchKeywords.every(term => {
+                        return (
+                            item.id.toLowerCase().includes(term) ||
+                            item.type.toLowerCase().includes(term) ||
+                            item.loc.toLowerCase().includes(term) ||
+                            item.status.toLowerCase().includes(term) ||
+                            item.risk.toString().includes(term)
+                        );
+                    });
+
+                    return typeMatch && riskMatch && keywordMatch;
+                });
+
+                renderTable(currentFilteredData);
+            }
+
+            askAiSearch.addEventListener('input', filterData);
+            filterType.addEventListener('change', filterData);
+            renderTable(activityData);
+
+            // Modals Logic
+            const detailsModal = document.getElementById('details-modal');
+            const aiAssistModal = document.getElementById('ai-assist-modal');
+            const notificationModal = document.getElementById('notification-modal');
+            const createReportModal = document.getElementById('create-report-modal');
+            const manageDashboardsModal = document.getElementById('manage-dashboards-modal');
+            const detailsModalContent = document.getElementById('details-modal-content');
+            const aiAssistModalContent = document.getElementById('ai-assist-modal-content');
+            const notificationModalContent = document.getElementById('notification-modal-content');
+            const createReportModalContent = document.getElementById('create-report-modal-content');
+            const manageDashboardsModalContent = document.getElementById('manage-dashboards-modal-content');
+
+            window.closeModal = function() {
+                detailsModal.classList.add('hidden');
+                aiAssistModal.classList.add('hidden');
+                notificationModal.classList.add('hidden');
+                createReportModal.classList.add('hidden');
+                manageDashboardsModal.classList.add('hidden');
+            }
+
+            window.viewDetails = (id) => {
+                const item = activityData.find(d => d.id === id);
+                detailsModalContent.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <h2 class="text-xl font-bold mb-4">Activity Details: ${id}</h2>
+                        <button onclick="closeModal()" class="p-1"><i data-lucide="x"></i></button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 text-sm">
+                        <p><strong>Timestamp:</strong> ${new Date(item.ts).toLocaleString()}</p>
+                        <p><strong>Activity Type:</strong> ${item.type}</p>
+                        <p><strong>Location:</strong> ${item.loc}</p>
+                        <p><strong>Risk Score:</strong> ${item.risk}</p>
+                        <p><strong>Status:</strong> ${item.status}</p>
+                        <p><strong>Device ID:</strong> DEV-${item.id.split('-')[1]}</p>
+                        <p><strong>IP Address:</strong> 192.168.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}</p>
+                    </div>
+                    <div class="mt-6 text-right">
+                        <button class="btn-secondary" onclick="closeModal()">Close</button>
+                    </div>
+                `;
+                detailsModal.classList.remove('hidden');
+                lucide.createIcons();
+            };
+            
+            const dynamicContent = {
+                'SIM Swap': {
+                    explanation: 'A SIM swap was detected shortly after a password reset. The new SIM is active in a different state from the user\'s home location, which is a strong indicator of fraud.',
+                    actions: ['Suspend the account immediately.', 'Attempt to contact the original user via email.', 'Flag associated device for review.']
+                },
+                'IRSF': {
+                    explanation: 'This subscriber made multiple, long-duration calls to a premium-rate number in a high-risk country. This pattern is characteristic of International Revenue Share Fraud.',
+                    actions: ['Block all outgoing international calls for this subscriber.', 'Add the premium-rate number to the global blocklist.', 'Claw back any revenue paid out for these calls.']
+                },
+                'Top-up Fraud': {
+                    explanation: 'A stolen credit card was used to make multiple high-value top-ups in a short period. The card was reported stolen 1 hour after the transactions.',
+                    actions: ['Reverse all fraudulent top-up transactions.', 'Blacklist the credit card used.', 'Report the incident to the payment processor.']
+                },
+                'Account Takeover': {
+                    explanation: 'Login occurred from an unrecognized device and a geographically distant IP address, followed by immediate changes to the account password and contact email.',
+                    actions: ['Force logout on all active sessions.', 'Revert account changes and lock the account.', 'Initiate the account recovery process with the legitimate user.']
+                },
+                'MDN Change Risk': {
+                    explanation: 'A mobile directory number (MDN) change was requested from a new device shortly after a failed login attempt, suggesting an attempt to take over the account.',
+                    actions: ['Place a temporary hold on the MDN change request.', 'Require multi-factor authentication to proceed.', 'Notify the user of the attempted change.']
+                },
+                'Unusual Location Login': {
+                    explanation: 'The user logged in from a location that does not match their typical activity patterns or travel history.',
+                    actions: ['Challenge the session with a security question or 2FA.', 'Log the event for pattern analysis.', 'Optionally, notify the user of the new login location.']
+                },
+                'High Velocity transactions': {
+                    explanation: 'The account has performed an abnormally high number of transactions (e.g., top-ups, transfers) in a very short time frame, which is indicative of automated bot activity.',
+                    actions: ['Temporarily rate-limit the account\'s transaction ability.', 'Initiate a CAPTCHA challenge on the next transaction.', 'Review the transaction history for signs of collusion.']
+                },
+                'Account Takeover Attempt': {
+                    explanation: 'Multiple failed login attempts from various IP addresses were followed by a successful login, indicating a possible brute-force or credential stuffing attack.',
+                    actions: ['Invalidate the current password and force a reset.', 'Review account for any unauthorized changes.', 'Recommend the user enable two-factor authentication.']
+                },
+                'default': {
+                    explanation: 'This alert was triggered due to a combination of factors that deviate from the user\'s normal behavior.',
+                    actions: ['Review user\'s recent activity history.', 'Compare activity against peer group behavior.', 'Consider manual outreach if risk is high.']
+                }
+            };
+
+            window.aiAssist = (id) => {
+                const item = activityData.find(d => d.id === id);
+                const content = dynamicContent[item.type] || dynamicContent['default'];
+                
+                const actionsHtml = content.actions.map(action => `<li>${action}</li>`).join('');
+
+                aiAssistModalContent.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <h2 class="text-xl font-bold mb-4 flex items-center"><i data-lucide="bot" class="w-6 h-6 mr-2 text-blue-400"></i>AI Assistant</h2>
+                        <button onclick="closeModal()" class="p-1"><i data-lucide="x"></i></button>
+                    </div>
+
+                    <div id="ai-assist-main-view">
+                        <div class="space-y-4 text-sm">
+                            <div id="risk-explanation-details" class="hidden p-3 bg-gray-900/50 rounded-md mb-4 text-xs transition-all duration-300"></div>
+                            <p class="font-semibold flex items-center"><i data-lucide="clipboard-check" class="w-4 h-4 mr-2 text-blue-400"></i>Recommended Actions</p>
+                            <ul class="list-disc list-inside space-y-2 text-gray-300 pl-5">${actionsHtml}</ul>
+                        </div>
+                        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 pt-4 mt-4 border-t border-gray-700">
+                            <button onclick="explainRisk(this, '${id}')" class="btn-secondary flex-1 flex items-center justify-center space-x-2"><i data-lucide="lightbulb" class="w-4 h-4 text-yellow-400"></i><span>Explain the Risk</span></button>
+                            <button onclick="engageAIAgent('${id}')" class="btn-secondary flex-1 flex items-center justify-center space-x-2"><i data-lucide="bot-message-square" class="w-4 h-4 text-teal-400"></i><span>Engage AI Agent</span></button>
+                        </div>
+                    </div>
+
+                    <div id="ai-agent-workflow-view" class="hidden">
+                        <p class="font-semibold mb-2">Agentic AI Workflow: Resolving Case ${id}</p>
+                        <div id="agent-log" class="agent-log space-y-2 p-2 bg-gray-900 rounded-md"></div>
+                        <div class="mt-4 flex justify-end">
+                             <button onclick="showAISummary()" class="btn-secondary flex items-center space-x-2"><i data-lucide="arrow-left" class="w-4 h-4"></i><span>Back to Summary</span></button>
+                        </div>
+                    </div>
+                `;
+                aiAssistModal.classList.remove('hidden');
+                lucide.createIcons();
+            };
+            
+            window.explainRisk = (button, id) => {
+                const detailsDiv = document.getElementById('risk-explanation-details');
+                const item = activityData.find(d => d.id === id);
+                const content = dynamicContent[item.type] || dynamicContent['default'];
+
+                if (detailsDiv.classList.contains('hidden')) {
+                    detailsDiv.innerHTML = `<p><strong class="text-white">Risk Explanation:</strong> ${content.explanation}</p>`;
+                    detailsDiv.classList.remove('hidden');
+                    button.innerHTML = `<i data-lucide="x-circle" class="w-4 h-4 text-yellow-400"></i><span>Hide Explanation</span>`;
+                } else {
+                    detailsDiv.classList.add('hidden');
+                    detailsDiv.innerHTML = '';
+                    button.innerHTML = `<i data-lucide="lightbulb" class="w-4 h-4 text-yellow-400"></i><span>Explain the Risk</span>`;
+                }
+                lucide.createIcons();
+            };
+
+            window.engageAIAgent = (id) => {
+                document.getElementById('ai-assist-main-view').classList.add('hidden');
+                const workflowView = document.getElementById('ai-agent-workflow-view');
+                workflowView.classList.remove('hidden');
+                const logContainer = document.getElementById('agent-log');
+                logContainer.innerHTML = ''; // Clear previous logs
+
+                const item = activityData.find(d => d.id === id);
+                const steps = [
+                    { type: 'thought', text: `Initiating investigation for high-risk ${item.type} on subscriber ${item.id}.`, icon: 'brain-circuit' },
+                    { type: 'action', text: `Querying MCP Subscriber Database for account details of ${item.id}.`, icon: 'database' },
+                    { type: 'response', text: `[MCP_DB Response]: OK. Account found. Status: Active. Tenure: 48 days.`, icon: 'server' },
+                    { type: 'thought', text: `Account is relatively new. Correlating with device and IP history.`, icon: 'brain-circuit' },
+                    { type: 'action', text: `Querying MCP Network Module for device history (DEV-${item.id.split('-')[1]}).`, icon: 'smartphone' },
+                    { type: 'response', text: `[MCP_Net Response]: OK. Device flagged in 3 prior cases. High velocity of SIM changes detected.`, icon: 'server' },
+                    { type: 'thought', text: `Confirmed high-risk device. The evidence strongly suggests a coordinated fraud attempt. Plan: Suspend subscriber, block device, and log for analyst review.`, icon: 'brain-circuit' },
+                    { type: 'action', text: `Sending suspend command to MCP Billing System for subscriber ${item.id}.`, icon: 'user-x' },
+                    { type: 'response', text: `[MCP_Billing Response]: OK. Subscriber ${item.id} suspended.`, icon: 'server' },
+                    { type: 'action', text: `Sending block command to MCP Network Module for device DEV-${item.id.split('-')[1]}.`, icon: 'shield-off' },
+                    { type: 'response', text: `[MCP_Net Response]: OK. Device DEV-${item.id.split('-')[1]} blocked.`, icon: 'server' },
+                    { type: 'result', text: `<strong>Resolution Complete:</strong> Account suspended and device blocked. Case has been escalated to Tier 2 analysts.`, icon: 'check-circle-2' }
+                ];
+                
+                let delay = 0;
+                steps.forEach(step => {
+                    setTimeout(() => {
+                        const logItem = document.createElement('div');
+                        logItem.className = `agent-log-item ${step.type}`;
+                        logItem.innerHTML = `
+                            <i data-lucide="${step.icon}" class="icon w-5 h-5 mt-0.5 text-${step.type === 'thought' ? 'yellow' : step.type === 'action' ? 'blue' : 'green'}-400"></i>
+                            <div class="text-sm">${step.text}</div>
+                        `;
+                        logContainer.appendChild(logItem);
+                        logContainer.scrollTop = logContainer.scrollHeight;
+                        lucide.createIcons();
+                    }, delay);
+                    delay += 1500; // Stagger the appearance of each step
+                });
+            };
+            
+            window.showAISummary = () => {
+                document.getElementById('ai-agent-workflow-view').classList.add('hidden');
+                document.getElementById('ai-assist-main-view').classList.remove('hidden');
+            };
+
+            // Simulation Logic
+            const runSimBtn = document.getElementById('run-simulation-btn');
+            const threatVectorSelect = document.getElementById('threat-vector');
+            const simLossEl = document.getElementById('simulation-loss');
+            const simDurationEl = document.getElementById('simulation-duration');
+
+            runSimBtn.addEventListener('click', () => {
+                runSimBtn.disabled = true;
+                runSimBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Simulating...</span>`;
+                lucide.createIcons();
+
+                const vector = threatVectorSelect.value;
+                
+                setTimeout(() => {
+                    let loss = 0;
+                    let duration = "over 24 hours";
+                    
+                    if (vector === 'Phishing Campaign') {
+                        loss = Math.floor(Math.random() * (25000 - 10000 + 1)) + 10000;
+                    } else if (vector === 'Zero-Day Exploit') {
+                        loss = Math.floor(Math.random() * (150000 - 75000 + 1)) + 75000;
+                        duration = "over 6 hours";
+                    } else { // Coordinated IRSF Attack
+                        loss = Math.floor(Math.random() * (50000 - 20000 + 1)) + 20000;
+                        duration = "over 48 hours";
+                    }
+
+                    simLossEl.textContent = `~$${loss.toLocaleString()} Loss`;
+                    simDurationEl.textContent = duration;
+
+                    runSimBtn.disabled = false;
+                    runSimBtn.innerHTML = `<i data-lucide="play-circle" class="w-4 h-4"></i><span>Run Simulation</span>`;
+                    lucide.createIcons();
+
+                }, 2000);
+            });
+
+            // View Alert Cluster Logic
+            const viewClusterBtn = document.getElementById('view-cluster-btn');
+            viewClusterBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                askAiSearch.value = ''; 
+                filterType.value = 'IRSF';
+                filterType.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+
+            // Header buttons logic
+            const manageDashboardsBtn = document.getElementById('manage-dashboards-btn');
+            const createReportBtn = document.getElementById('create-report-btn');
+
+            function showNotification(message) {
+                notificationModalContent.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <h2 class="text-lg font-bold mb-2 flex items-center"><i data-lucide="info" class="w-5 h-5 mr-2"></i>Notification</h2>
+                        <button onclick="closeModal()" class="p-1"><i data-lucide="x"></i></button>
+                    </div>
+                    <p class="text-sm text-gray-300">${message}</p>
+                    <div class="mt-6 text-right">
+                        <button class="btn-primary" onclick="closeModal()">OK</button>
+                    </div>
+                `;
+                notificationModal.classList.remove('hidden');
+                lucide.createIcons();
+            }
+
+            manageDashboardsBtn.addEventListener('click', () => {
+                manageDashboardsModalContent.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <h2 class="text-xl font-bold mb-4">Manage Dashboards</h2>
+                        <button onclick="closeModal()" class="p-1"><i data-lucide="x"></i></button>
+                    </div>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center p-3 bg-gray-900 rounded-md">
+                            <span class="font-semibold">Default Fraud View</span>
+                            <div class="flex items-center space-x-2">
+                                <span class="text-xs text-green-400 font-bold">ACTIVE</span>
+                                <button class="p-1 hover:bg-gray-700 rounded-md" onclick="showNotification('This is the current dashboard.')"><i data-lucide="eye" class="w-4 h-4"></i></button>
+                                <button class="p-1 hover:bg-gray-700 rounded-md" onclick="showNotification('Deletion of active dashboard is disabled.')"><i data-lucide="trash-2" class="w-4 h-4 text-gray-500"></i></button>
+                            </div>
+                        </div>
+                         <div class="flex justify-between items-center p-3 hover:bg-gray-800 rounded-md">
+                            <span>IRSF Deep Dive</span>
+                            <div class="flex items-center space-x-2">
+                                <button class="p-1 hover:bg-gray-700 rounded-md" onclick="showNotification('Loading IRSF Deep Dive dashboard...')"><i data-lucide="eye" class="w-4 h-4"></i></button>
+                                <button class="p-1 hover:bg-gray-700 rounded-md" onclick="showNotification('IRSF Deep Dive dashboard deleted.')"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            </div>
+                        </div>
+                         <div class="flex justify-between items-center p-3 hover:bg-gray-800 rounded-md">
+                            <span>SIM Swap Trends</span>
+                            <div class="flex items-center space-x-2">
+                                <button class="p-1 hover:bg-gray-700 rounded-md" onclick="showNotification('Loading SIM Swap Trends dashboard...')"><i data-lucide="eye" class="w-4 h-4"></i></button>
+                                <button class="p-1 hover:bg-gray-700 rounded-md" onclick="showNotification('SIM Swap Trends dashboard deleted.')"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                     <div class="mt-6 text-right">
+                        <button class="btn-secondary" onclick="closeModal()">Close</button>
+                    </div>
+                `;
+                manageDashboardsModal.classList.remove('hidden');
+                lucide.createIcons();
+            });
+            
+            createReportBtn.addEventListener('click', () => {
+                createReportModalContent.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <h2 class="text-xl font-bold mb-4">Create New Fraud Report</h2>
+                        <button onclick="closeModal()" class="p-1"><i data-lucide="x"></i></button>
+                    </div>
+                    <div class="space-y-4 text-sm">
+                        <div>
+                            <label for="report-name" class="block text-xs font-medium text-gray-400 mb-1">Report Name</label>
+                            <input type="text" id="report-name" class="ask-ai-input w-full px-3 py-2 rounded-md" placeholder="e.g., Q3 IRSF Summary">
+                        </div>
+                        <div>
+                            <label for="report-desc" class="block text-xs font-medium text-gray-400 mb-1">Description</label>
+                            <textarea id="report-desc" rows="3" class="ask-ai-input w-full px-3 py-2 rounded-md" placeholder="A brief summary of the report's contents..."></textarea>
+                        </div>
+                        <div>
+                            <label for="report-type" class="block text-xs font-medium text-gray-400 mb-1">Report Type</label>
+                            <select id="report-type" class="ask-ai-input w-full px-3 py-2 rounded-md">
+                                <option>Summary Report</option>
+                                <option>IRSF Activity</option>
+                                <option>SIM Swap Analysis</option>
+                                <option>Account Takeover Incidents</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+                        <button class="btn-primary" id="generate-pdf-btn" onclick="generateReport()">Generate Report</button>
+                    </div>
+                `;
+                createReportModal.classList.remove('hidden');
+                lucide.createIcons();
+            });
+
+            window.generateReport = () => {
+                const generateBtn = document.getElementById('generate-pdf-btn');
+                generateBtn.disabled = true;
+                generateBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Generating...`;
+                lucide.createIcons();
+
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                const reportName = document.getElementById('report-name').value || 'Fraud Report';
+                const reportDesc = document.getElementById('report-desc').value;
+                const reportType = document.getElementById('report-type').value;
+
+                doc.setFontSize(18);
+                doc.text(reportName, 14, 22);
+                doc.setFontSize(11);
+                doc.setTextColor(100);
+                doc.text(`Report Type: ${reportType}`, 14, 30);
+                doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 36);
+                if(reportDesc) {
+                    const splitDesc = doc.splitTextToSize(reportDesc, 180);
+                    doc.text(splitDesc, 14, 44);
+                }
+                
+                const tableData = currentFilteredData.map(item => [
+                    new Date(item.ts).toLocaleString(),
+                    item.id,
+                    item.type,
+                    item.loc,
+                    item.risk,
+                    item.status
+                ]);
+
+                doc.autoTable({
+                    head: [['Timestamp', 'Subscriber ID', 'Activity Type', 'Location', 'Risk Score', 'Status']],
+                    body: tableData,
+                    startY: reportDesc ? 60 : 50,
+                    theme: 'grid',
+                    headStyles: { fillColor: [33, 38, 45] }
+                });
+
+                const safeFilename = reportName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                doc.save(`${safeFilename}.pdf`);
+
+                setTimeout(() => {
+                    closeModal();
+                    showNotification("Report has been downloaded successfully.");
+                }, 500);
+            };
+
+            // Close modal on backdrop click
+            [detailsModal, aiAssistModal, notificationModal, createReportModal, manageDashboardsModal].forEach(modal => {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        window.closeModal();
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
